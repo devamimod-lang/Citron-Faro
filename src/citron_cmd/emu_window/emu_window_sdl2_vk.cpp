@@ -16,14 +16,20 @@
 #include <SDL_syswm.h>
 
 EmuWindow_SDL2_VK::EmuWindow_SDL2_VK(InputCommon::InputSubsystem* input_subsystem_,
-                                     Core::System& system_, bool fullscreen)
+                                      Core::System& system_, bool fullscreen)
     : EmuWindow_SDL2{input_subsystem_, system_} {
     const std::string window_title = fmt::format("citron {} | {}-{} (Vulkan)", Common::g_build_name,
                                                  Common::g_scm_branch, Common::g_scm_desc);
+    Uint32 window_flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+#ifdef _WIN32
+    if (std::getenv("CITRON_EMBEDDED")) {
+        window_flags |= SDL_WINDOW_HIDDEN;
+    }
+#endif
     render_window =
         SDL_CreateWindow(window_title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                          Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height,
-                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+                         window_flags);
 
     SDL_SysWMinfo wm;
     SDL_VERSION(&wm.version);

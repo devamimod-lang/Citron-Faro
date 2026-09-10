@@ -75,7 +75,8 @@ static void PrintHelp(const char* argv0) {
                  " Nickname, password, address and port for multiplayer\n"
                  "-p, --program         Pass following string as arguments to executable\n"
                  "-u, --user            Select a specific user profile from 0 to 7\n"
-                 "-v, --version         Output version information and exit\n";
+                 "-v, --version         Output version information and exit\n"
+                 "--embedded            Start embedded mode for Faro integration\n";
 }
 
 static void PrintVersion() {
@@ -214,6 +215,7 @@ int main(int argc, char** argv) {
 
     bool use_multiplayer = false;
     bool fullscreen = false;
+    bool embedded = false;
     std::string nickname{};
     std::string password{};
     std::string address{};
@@ -229,6 +231,7 @@ int main(int argc, char** argv) {
         {"program", optional_argument, 0, 'p'},
         {"user", required_argument, 0, 'u'},
         {"version", no_argument, 0, 'v'},
+        {"embedded", no_argument, 0, 0},
         {0, 0, 0, 0},
         // clang-format on
     };
@@ -295,6 +298,13 @@ int main(int argc, char** argv) {
             case 'v':
                 PrintVersion();
                 return 0;
+            default:
+                if (arg == 0) {
+                    if (std::string(long_options[option_index].name) == "embedded") {
+                        embedded = true;
+                    }
+                }
+                break;
             }
         } else {
 #ifdef _WIN32
@@ -326,6 +336,11 @@ int main(int argc, char** argv) {
     LocalFree(argv_w);
 #endif
     Common::ConfigureNvidiaEnvironmentFlags();
+    if (embedded) {
+#ifdef _WIN32
+        _putenv_s("CITRON_EMBEDDED", "1");
+#endif
+    }
 
     if (filepath.empty()) {
         LOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
@@ -415,6 +430,24 @@ int main(int argc, char** argv) {
     // Core is loaded, start the GPU (makes the GPU contexts current to this thread)
     system.GPU().Start();
     system.GetCpuManager().OnGpuReady();
+
+    if (embedded) {
+        std::cout << ";#IPC_ENABLED" << std::endl;
+        std::cout << ";#IPC_END" << std::endl;
+        std::cout.flush();
+        std::thread([&]() {
+            std::string line;
+            while (std::getline(std::cin, line)) {
+                if (line == "PAUSE") {
+                    system.Pause();
+                } else if (line == "RESUME") {
+                    system.GetCpuManager().Resume();
+                } else if (line == "STOP") {
+                    system.RequestExit();
+                }
+            }
+        }).detach();
+    }
 
     if (Settings::values.use_disk_shader_cache.GetValue()) {
         system.Renderer().ReadRasterizer()->LoadDiskResources(
